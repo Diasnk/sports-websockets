@@ -8,7 +8,7 @@ function sendJson(socket, payLoad){
 
 function broadcast(wss, payLoad){
     for( const client of wss.clients ){
-        if(client.readyState !== WebSocket.OPEN) return;
+        if(client.readyState !== WebSocket.OPEN) continue;
 
         client.send(JSON.stringify(payLoad));
     }
@@ -18,11 +18,25 @@ export function attachWebSocketServer(server){
     const wss = new WebSocketServer({server, path: '/ws', maxPayload: 1024 * 1024});
 
     wss.on('connection', (socket) => {
-        sendJson(socket, {type: 'welcome', message: 'Welcome to the WebSocket server!'});
+        socket.isAlive = true;
+        socket.on('pong', () => {
+            socket.isAlive = true;
+        });
+
+        sendJson(socket, {type: 'welcome', message: 'Welcome to the Sports WebSocket API!'});
 
         socket.on('error', console.error);
-
     });
+
+    const interval = setInterval(() => {
+        wss.clients.forEach((ws) => {
+            if (!ws.isAlive) return ws.terminate();
+
+            ws.isAlive = false;
+            ws.ping();
+        })}, 30000);
+
+    wss.on('close', () => {clearInterval(interval);});
 
     function broadcastMatchCreated(match){
         broadcast(wss, {type: 'match_created', data: match});
